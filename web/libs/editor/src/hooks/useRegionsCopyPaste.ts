@@ -40,7 +40,9 @@ export const useRegionsCopyPaste = (entity: any) => {
           return { ...res, readonly: false };
         });
 
-        entity.appendResults(results);
+        const pastedRegions = entity.appendResults(results);
+
+        if (pastedRegions?.length) entity.selectAreas(pastedRegions);
         ev.preventDefault();
       } catch (e) {
         console.error(e);

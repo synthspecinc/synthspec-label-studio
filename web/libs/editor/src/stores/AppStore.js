@@ -444,9 +444,12 @@ export default types
       // create relation
       hotkeys.addNamed("region:relation", () => {
         const c = self.annotationStore.selected;
+        const sources = c?.selectedRegions?.filter(
+          (region) => !region.classification && !region.hidden && !region.incomplete && !region.isReadOnly?.(),
+        );
 
-        if (c && c.highlightedNode && !c.isLinkingMode) {
-          c.startLinkingMode(CREATE_RELATION_MODE, c.highlightedNode);
+        if (c && sources?.length && !c.isLinkingMode) {
+          c.startLinkingMode(CREATE_RELATION_MODE, sources.length > 1 ? sources : c.highlightedNode);
         }
       });
 
@@ -528,6 +531,7 @@ export default types
         e.stopImmediatePropagation();
 
         const c = self.annotationStore.selected;
+        if (c?.cancelGroupTranslation()) return;
         const managers = ToolsManager.allInstances();
         const tools = managers
           .map((m) => m.findSelectedTool())
