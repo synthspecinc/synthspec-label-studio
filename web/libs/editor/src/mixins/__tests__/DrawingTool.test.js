@@ -27,7 +27,7 @@ function createMockAnnotation(overrides = {}) {
     isDrawing: false,
     setIsDrawing: mock(),
     createResult: mock(() => mockCreatedResult),
-    history: { freeze: mock(), unfreeze: mock() },
+    history: { freeze: mock(), unfreeze: mock(), cancelFreeze: mock() },
     unselectAll: mock(),
     regionStore: {
       selection: {
@@ -116,7 +116,7 @@ const TestDrawingTool = types.compose(EnvDrawingTool, DrawingTool, WithTagTypes(
 const Store = types.model("Store", { tool: TestDrawingTool });
 
 function createStore(envOverrides = {}) {
-  const annotation = createMockAnnotation();
+  const annotation = envOverrides.annotation ?? createMockAnnotation();
   const control = createMockControl();
   const obj = createMockObj();
   const manager = createMockManager();
@@ -347,6 +347,57 @@ describe("DrawingTool mixin", () => {
     });
   });
 
+  describe("cancelDrawing", () => {
+    it("removes the transient area and resets drawing without committing history", () => {
+      const { tool, annotation, obj } = createStore();
+      tool.startDrawing(0, 0);
+
+      tool.cancelDrawing();
+      tool.discardDrawingTransaction();
+
+      expect(obj.deleteDrawingRegion).toHaveBeenCalledTimes(1);
+      expect(annotation.createResult).not.toHaveBeenCalled();
+      expect(annotation.setIsDrawing).toHaveBeenLastCalledWith(false);
+      expect(annotation.history.cancelFreeze).toHaveBeenCalled();
+      expect(annotation.history.unfreeze).not.toHaveBeenCalled();
+      expect(tool.currentArea).toBeNull();
+      expect(tool.mode).toBe("viewing");
+    });
+
+    it("is idempotent after the drawing has already been cancelled", () => {
+      const { tool, obj } = createStore();
+      tool.startDrawing(0, 0);
+
+      tool.cancelDrawing();
+      tool.discardDrawingTransaction();
+      tool.cancelDrawing();
+      tool.discardDrawingTransaction();
+
+      expect(obj.deleteDrawingRegion).toHaveBeenCalledTimes(1);
+      expect(tool.currentArea).toBeNull();
+      expect(tool.mode).toBe("viewing");
+    });
+
+    it("pauses autosave during a draft and cancels the pending write on cancellation", () => {
+      const autosave = mock();
+      autosave.cancel = mock();
+      autosave.paused = false;
+      const annotation = createMockAnnotation({ autosave });
+      const { tool } = createStore({ annotation });
+
+      tool.startDrawing(0, 0);
+      expect(autosave.paused).toBe(true);
+      expect(autosave.cancel).toHaveBeenCalledTimes(1);
+
+      tool.cancelDrawing();
+      tool.discardDrawingTransaction();
+
+      expect(autosave.cancel).toHaveBeenCalledTimes(2);
+      expect(autosave.paused).toBe(false);
+      expect(autosave).not.toHaveBeenCalled();
+    });
+  });
+
   describe("applyActiveStates", () => {
     it("calls area.setValue for each active state", () => {
       const { tool, obj } = createStore();
@@ -513,6 +564,22 @@ describe("TwoPointsDrawingTool", () => {
     tool.mousedownEv({ button: 0, offsetX: 50, offsetY: 50 }, [0.01, 0.01]);
     tool.mousemoveEv({}, [0.5, 0.5]);
     expect(tool.isDrawing).toBe(true);
+  });
+
+  it("cancelDrawing clears a pending pointer gesture before the next mouseup", () => {
+    const store = createTwoPointsStore({ group: "default" });
+    const tool = store.tool;
+    tool.mousedownEv({ button: 0, offsetX: 50, offsetY: 50 }, [0.01, 0.01]);
+    tool.mousemoveEv({}, [0.5, 0.5]);
+    expect(tool.isDrawing).toBe(true);
+
+    tool.cancelDrawing();
+    tool.discardDrawingTransaction();
+    tool.mouseupEv({}, [0.6, 0.6]);
+
+    expect(tool.annotation.createResult).not.toHaveBeenCalled();
+    expect(tool.isDrawing).toBe(false);
+    expect(tool.currentArea).toBeNull();
   });
 
   it("mouseupEv after drag finishes drawing", () => {
@@ -685,6 +752,21 @@ describe("MultipleClicksDrawingTool", () => {
     tool._clickEv({ timeStamp: 100 }, [0.1, 0.1]);
     expect(tool.currentArea).not.toBeNull();
     expect(tool.listenForClose).toHaveBeenCalled();
+  });
+
+  it("cancelDrawing clears unfinished polygon click state", () => {
+    const store = createMultiStore({ group: "default" });
+    const tool = store.tool;
+    tool.listenForClose = mock();
+    tool._clickEv({ timeStamp: 100 }, [0.1, 0.1]);
+    tool.nextPoint(0.2, 0.2);
+
+    tool.cancelDrawing();
+    tool.discardDrawingTransaction();
+
+    expect(tool.annotation.regionStore.selection.drawingUnselect).toHaveBeenCalled();
+    expect(tool.currentArea).toBeNull();
+    expect(tool.mode).toBe("viewing");
   });
 });
 

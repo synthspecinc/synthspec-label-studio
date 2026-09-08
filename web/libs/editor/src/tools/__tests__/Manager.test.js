@@ -151,6 +151,26 @@ describe("ToolsManager", () => {
       ToolsManager.resetActiveDrawings();
       expect(resetBeforeAnnotationSwitch).toHaveBeenCalled();
     });
+
+    it("cancels supported drawing tools before an annotation switch", () => {
+      const m = ToolsManager.getInstance({ name: "reset-supported" });
+      const cancelDrawing = mock();
+      const discardDrawingTransactionAfterSnapshot = mock();
+      const drawingTool = {
+        selected: true,
+        isDrawing: true,
+        currentArea: {},
+        supportsDrawingCancellation: true,
+        cancelDrawing,
+        discardDrawingTransactionAfterSnapshot,
+      };
+      m.tools["key#draw"] = drawingTool;
+
+      ToolsManager.resetActiveDrawings();
+
+      expect(cancelDrawing).toHaveBeenCalledTimes(1);
+      expect(discardDrawingTransactionAfterSnapshot).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("constructor and getters", () => {
@@ -351,6 +371,79 @@ describe("ToolsManager", () => {
       m.selectTool(next, true);
       expect(tag1.unselectAll).toHaveBeenCalled();
       expect(tag2.unselectAll).not.toHaveBeenCalled();
+    });
+
+    it("cancels an unfinished drawing instead of completing it when switching tools", () => {
+      const m = ToolsManager.getInstance({ name: "sel" });
+      const current = {
+        setSelected: mock(),
+        selected: true,
+        isDrawingTool: true,
+        isDrawing: true,
+        supportsDrawingCancellation: true,
+        currentArea: {},
+        cancelDrawing: mock(),
+        discardDrawingTransaction: mock(),
+        complete: mock(),
+        group: "segmentation",
+        control: { type: "rectanglelabels" },
+        obj: { activeStates: () => [] },
+      };
+      const next = {
+        setSelected: mock(),
+        group: "segmentation",
+        control: { type: "polygonlabels" },
+        obj: { activeStates: () => [] },
+      };
+      m.tools["k#cur"] = current;
+      m.tools["k#next"] = next;
+
+      m.selectTool(next, true);
+
+      expect(current.cancelDrawing).toHaveBeenCalledTimes(1);
+      expect(current.discardDrawingTransaction).toHaveBeenCalledTimes(1);
+      expect(current.complete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("cancelDrawingAndSelectDefault", () => {
+    it("deactivates an idle image drawing tool and selects the default tool", () => {
+      const m = ToolsManager.getInstance({ name: "cancel" });
+      const drawing = {
+        selected: true,
+        isDrawingTool: true,
+        supportsDrawingCancellation: true,
+        setSelected: mock(function setSelected(value) {
+          drawing.selected = value;
+        }),
+        cancelDrawing: mock(),
+        discardDrawingTransaction: mock(),
+      };
+      const def = {
+        selected: false,
+        default: true,
+        toolName: "MoveTool",
+        setSelected: mock(function setSelected(value) {
+          def.selected = value;
+        }),
+      };
+      m.tools["k#drawing"] = drawing;
+      m.tools["k#default"] = def;
+      m._default_tool = def;
+
+      expect(m.cancelDrawingAndSelectDefault()).toBe(true);
+      expect(drawing.cancelDrawing).toHaveBeenCalledTimes(1);
+      expect(drawing.selected).toBe(false);
+      expect(def.selected).toBe(true);
+    });
+
+    it("is inert when the selected tool is not an image drawing tool", () => {
+      const m = ToolsManager.getInstance({ name: "cancel" });
+      const selected = { selected: true, setSelected: mock() };
+      m.tools["k#selected"] = selected;
+
+      expect(m.cancelDrawingAndSelectDefault()).toBe(false);
+      expect(selected.setSelected).not.toHaveBeenCalled();
     });
   });
 
