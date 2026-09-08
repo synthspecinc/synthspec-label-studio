@@ -2,7 +2,7 @@ if (typeof globalThis.structuredClone === "undefined") {
   globalThis.structuredClone = (value) => JSON.parse(JSON.stringify(value));
 }
 
-mockModule("keymaster", () => {
+jest.mock("keymaster", () => {
   let scope = "all";
   const keymaster = () => {};
   keymaster.unbind = () => {};
@@ -66,14 +66,14 @@ const createAnnotation = (results = []) => {
       interfaces: ["basic"],
     },
     {
-      events: { hasEvent: mock(() => false), invoke: mock() },
+      events: { hasEvent: jest.fn(() => false), invoke: jest.fn() },
       hotkeys: {
-        addKey: mock(),
-        removeKey: mock(),
-        removeNamed: mock(),
-        overwriteNamed: mock(),
-        unbindAll: mock(),
-        setScope: mock(),
+        addKey: jest.fn(),
+        removeKey: jest.fn(),
+        removeNamed: jest.fn(),
+        overwriteNamed: jest.fn(),
+        unbindAll: jest.fn(),
+        setScope: jest.fn(),
       },
       messages: {},
       settings: {},

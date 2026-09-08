@@ -106,3 +106,23 @@ export const multiRegionTask = {
   annotations: [{ id: 2703101, result: multiRegionResults }],
   predictions: [],
 };
+
+export const escapeDrawingConfig = `
+  <View>
+    <Image name="drawing" value="$image" />
+    <RectangleLabels name="fixture_box" toName="drawing">
+      <Label value="Fixture box" background="#4A90E2" />
+    </RectangleLabels>
+    <PolygonLabels name="fixture_boundary" toName="drawing">
+      <Label value="Fixture boundary" background="#7ED321" />
+    </PolygonLabels>
+    <TextArea name="notes" toName="drawing" rows="2" />
+  </View>
+`;
+
+export const escapeDrawingTask = {
+  id: 32001,
+  data: { image: MULTI_REGION_DRAWING },
+  annotations: [{ id: 3200101, result: [] }],
+  predictions: [],
+};
