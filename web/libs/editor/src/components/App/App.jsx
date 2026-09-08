@@ -1,7 +1,7 @@
 /**
  * Libraries
  */
-import React, { Component } from "react";
+import React, { Component, useEffect } from "react";
 import { Result, Spin } from "antd";
 import { getEnv, getRoot } from "mobx-state-tree";
 import { observer, Provider } from "mobx-react";
@@ -33,7 +33,8 @@ import { reactCleaner } from "../../utils/reactCleaner";
 import { guidGenerator } from "../../utils/unique";
 import { isDefined, sortAnnotations } from "../../utils/utilities";
 import { queryClient } from "@humansignal/core/lib/utils/query-client";
-import { ToastProvider, ToastViewport } from "@humansignal/ui/lib/toast/toast";
+import { ToastProvider, ToastViewport, useToast } from "@humansignal/ui/lib/toast/toast";
+import { EDITOR_NOTIFICATION_EVENT } from "../../utils/editorNotifications";
 
 /**
  * Components
@@ -66,6 +67,19 @@ const hasTagInSidebar = (annotation) => {
     }
   }
   return false;
+};
+
+const EditorNotifications = () => {
+  const toast = useToast();
+
+  useEffect(() => {
+    const showNotification = (event) => toast?.show(event.detail);
+
+    window.addEventListener(EDITOR_NOTIFICATION_EVENT, showNotification);
+    return () => window.removeEventListener(EDITOR_NOTIFICATION_EVENT, showNotification);
+  }, [toast]);
+
+  return null;
 };
 
 /**
@@ -254,6 +268,7 @@ class App extends Component {
           <Settings store={store} />
           <Provider store={store}>
             <ToastProvider>
+              <EditorNotifications />
               <InstructionsModal
                 visible={store.showingDescription}
                 onCancel={() => store.toggleDescription()}

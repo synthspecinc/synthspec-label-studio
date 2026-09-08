@@ -185,9 +185,9 @@ const RegionsMixin = types
         if (!self.isReadOnly() && (self.isDrawing || annotation.isDrawing)) return;
 
         if (!self.isReadOnly() && annotation.isLinkingMode) {
-          annotation.addLinkedRegion(self);
+          const result = annotation.addLinkedRegion(self);
           annotation.stopLinkingMode();
-          annotation.regionStore.unselectAll();
+          if (!result?.isBulk) annotation.regionStore.unselectAll();
         } else {
           self._selectArea(ev?.ctrlKey || ev?.metaKey);
         }
