@@ -100,6 +100,10 @@ export const RegionItem: FC<RegionItemProps> = observer(
 
 const RegionAction: FC<any> = observer(({ region, annotation, editMode, onEditModeChange }) => {
   const entityButtons: JSX.Element[] = [];
+  const relationSources = annotation.selectedRegions.filter(
+    (node: any) => !node.classification && !node.hidden && !node.incomplete && !node.isReadOnly?.(),
+  );
+  const isBulkRelation = relationSources.length > 1;
 
   entityButtons.push(
     <WithHotkey binging="region:relation">
@@ -113,10 +117,11 @@ const RegionAction: FC<any> = observer(({ region, annotation, editMode, onEditMo
           if (annotation.isLinkingMode) {
             annotation.stopLinkingMode();
           } else {
-            annotation.startLinkingMode(CREATE_RELATION_MODE, region);
+            annotation.startLinkingMode(CREATE_RELATION_MODE, isBulkRelation ? relationSources : region);
           }
         }}
-        aria-label="Create Relation"
+        aria-label={isBulkRelation ? `Create Relation from ${relationSources.length} regions` : "Create Relation"}
+        tooltip={isBulkRelation ? `Create Relation from ${relationSources.length} regions` : "Create Relation"}
       >
         <IconRelationLink />
       </RegionActionButton>

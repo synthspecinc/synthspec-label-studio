@@ -63,13 +63,13 @@ export const LinkingModes = types
 
       addLinkedRegion(region) {
         if (self.currentLinkingMode) {
-          self.currentLinkingMode.addLinkedRegion?.(region);
+          return self.currentLinkingMode.addLinkedRegion?.(region);
         }
       },
 
       addLinkedResult(region) {
         if (self.currentLinkingMode) {
-          self.currentLinkingMode.addLinkedResult?.(region);
+          return self.currentLinkingMode.addLinkedResult?.(region);
         }
       },
 

@@ -126,6 +126,11 @@ class ToolsManager {
     const currentTool = this.findSelectedTool();
     const newSelection = tool?.group;
 
+    if (!isInitial && currentTool !== tool) {
+      this.obj?.annotation?.cancelGroupTranslation?.();
+      this.obj?.annotation?.stopLinkingMode?.();
+    }
+
     // if there are no tools selected, there are no specific labels to unselect
     // also this will skip annotation init
     if (currentTool && newSelection === "segmentation") {

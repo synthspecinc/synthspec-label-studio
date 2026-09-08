@@ -68,7 +68,7 @@ export const Relations = {
     this.hiddenRelations.should("have.length", count);
   },
   toggleCreation() {
-    cy.get('button[aria-label="Create Relation"]').click();
+    cy.get('button[aria-label^="Create Relation"]').first().click();
   },
   toggleCreationWithHotkey() {
     // hotkey is alt + r

@@ -11,6 +11,7 @@ import Area from "../../regions/Area";
 import Result from "../../regions/Result";
 import Utils from "../../utils";
 import { FF_DEV_1284, FF_DEV_3391, FF_LSDV_4583, FF_REVIEWER_FLOW, isFF } from "../../utils/feature-flags";
+import { clampGroupTranslation, validateImageRectangleSelection } from "../../utils/imageRegionTranslation";
 import { delay, isDefined } from "../../utils/utilities";
 import { CommentStore } from "../Comment/CommentStore";
 import RegionStore from "../RegionStore";
@@ -315,7 +316,13 @@ const _Annotation = types
         });
       });
 
-      return selectedResults.map((r) => r.serialize()).filter(Boolean);
+      const serializedResults = selectedResults.map((r) => r.serialize()).filter(Boolean);
+      const selectedRegionIds = new Set(self.selectedRegions.map((region) => region.cleanId));
+      const internalRelations = self.relationStore
+        .serialize()
+        .filter((relation) => selectedRegionIds.has(relation.from_id) && selectedRegionIds.has(relation.to_id));
+
+      return serializedResults.concat(internalRelations);
     },
 
     get highlightedNode() {
@@ -380,6 +387,7 @@ const _Annotation = types
     submissionStarted: 0,
     versions: {},
     resultSnapshot: "",
+    groupTranslation: null,
   }))
   .volatile(() =>
     isFF(FF_DEV_3391)
@@ -391,6 +399,10 @@ const _Annotation = types
       : {},
   )
   .views((self) => ({
+    get isGroupTranslating() {
+      return self.groupTranslation !== null;
+    },
+
     // experiment to display review buttons in Quick View
     get canBeReviewed() {
       const store = self.store;
@@ -412,6 +424,132 @@ const _Annotation = types
     },
   }))
   .actions((self) => ({
+    startGroupTranslation(anchorRegion) {
+      // A multi-node Konva drag can emit drag-start for more than one selected
+      // shape. Keep the first immutable snapshot and its history lock instead
+      // of replacing it (and leaking the earlier lock) on every event.
+      if (self.groupTranslation) {
+        return {
+          mode: "group",
+          count: self.groupTranslation.regions.length,
+          anchorId: self.groupTranslation.anchorId,
+        };
+      }
+
+      const regions = self.selectedRegions;
+      const validation = validateImageRectangleSelection(regions, anchorRegion.object);
+
+      if (validation.mode !== "group") return validation;
+
+      const historyKey = `multi-region-move:${anchorRegion.id}`;
+
+      self.history.freeze(historyKey);
+      self.groupTranslation = {
+        anchorId: anchorRegion.id,
+        historyKey,
+        bounds: validation.bounds,
+        delta: { x: 0, y: 0 },
+        regions: regions.map((region) => ({
+          id: region.id,
+          x: region.x,
+          y: region.y,
+          width: region.width,
+          height: region.height,
+          rotation: region.rotation,
+        })),
+      };
+
+      return { mode: "group", count: regions.length };
+    },
+
+    previewGroupTranslation(anchorRegion, canvasPosition) {
+      const translation = self.groupTranslation;
+      if (!translation || translation.anchorId !== anchorRegion.id) return null;
+
+      const anchorSnapshot = translation.regions.find((region) => region.id === anchorRegion.id);
+      if (!anchorSnapshot) return null;
+
+      const requestedDelta = {
+        x: anchorRegion.object.canvasToInternalX(canvasPosition.x) - anchorSnapshot.x,
+        y: anchorRegion.object.canvasToInternalY(canvasPosition.y) - anchorSnapshot.y,
+      };
+      const delta = clampGroupTranslation(translation.bounds, requestedDelta);
+      const layers = new Set();
+
+      translation.delta = delta;
+      translation.regions.forEach((snapshot) => {
+        const region = self.areas.get(snapshot.id);
+        const shape = region?.shapeRef;
+        if (!region || !shape) return;
+
+        shape.position({
+          x: region.object.internalToCanvasX(snapshot.x + delta.x),
+          y: region.object.internalToCanvasY(snapshot.y + delta.y),
+        });
+        const layer = shape.getLayer?.();
+        if (layer) layers.add(layer);
+      });
+      layers.forEach((layer) => layer.batchDraw());
+
+      return delta;
+    },
+
+    commitGroupTranslation(anchorRegion) {
+      const translation = self.groupTranslation;
+      if (!translation) return false;
+      if (anchorRegion && translation.anchorId !== anchorRegion.id) return false;
+
+      try {
+        const { delta } = translation;
+        translation.regions.forEach((snapshot) => {
+          const region = self.areas.get(snapshot.id);
+          if (!region) return;
+
+          region.setPositionInternal(
+            snapshot.x + delta.x,
+            snapshot.y + delta.y,
+            snapshot.width,
+            snapshot.height,
+            snapshot.rotation,
+          );
+          region.updateOriginOnEdit?.();
+        });
+      } finally {
+        self.groupTranslation = null;
+        // MST publishes the batched snapshot after this action completes. Keep
+        // the lock through that flush so every region update becomes one step.
+        setTimeout(() => {
+          if (isAlive(self)) self.history.unfreeze(translation.historyKey);
+        }, 0);
+      }
+
+      return true;
+    },
+
+    cancelGroupTranslation() {
+      const translation = self.groupTranslation;
+      if (!translation) return false;
+
+      const layers = new Set();
+      translation.regions.forEach((snapshot) => {
+        const region = self.areas.get(snapshot.id);
+        const shape = region?.shapeRef;
+        if (!region || !shape) return;
+
+        shape.position({
+          x: region.object.internalToCanvasX(snapshot.x),
+          y: region.object.internalToCanvasY(snapshot.y),
+        });
+        const layer = shape.getLayer?.();
+        if (layer) layers.add(layer);
+      });
+      layers.forEach((layer) => layer.batchDraw());
+      self.groupTranslation = null;
+      self.history.unfreeze(translation.historyKey);
+
+      return true;
+    },
+
     reinitHistory(force = true) {
       self.history.reinit(force);
       self.autosave?.cancel();
@@ -676,6 +814,7 @@ const _Annotation = types
           stopDrawingAfterNextUndo = vertices <= 1;
         }
 
+        regionStore.clearSelection();
         history.undo();
         regionStore.selectRegionsByIds(selectedIds);
 
@@ -692,6 +831,7 @@ const _Annotation = types
       if (history?.canRedo) {
         const selectedIds = regionStore.selectedIds;
 
+        regionStore.clearSelection();
         history.redo();
         regionStore.selectRegionsByIds(selectedIds);
       }
@@ -1048,22 +1188,36 @@ const _Annotation = types
     appendResults(results) {
       if (!self.editable || self.readonly) return;
 
-      const regionIdMap = {};
-      const prevSize = self.regionStore.regions.length;
+      const regionIdMap = new Map();
+      const clonedResults = structuredClone(results);
 
-      // Generate new ids to prevent collisions
-      for (const result of results) {
-        const regionId = result.id;
+      // Build the complete logical-region map before remapping any result or relation.
+      for (const result of clonedResults) {
+        if (result.type === "relation" || !result.id) continue;
 
-        if (!regionIdMap[regionId]) {
-          regionIdMap[regionId] = guidGenerator();
+        if (!regionIdMap.has(result.id)) {
+          regionIdMap.set(result.id, guidGenerator());
         }
-        result.id = regionIdMap[regionId];
       }
 
-      self.deserializeResults(results);
+      const remappedResults = clonedResults.flatMap((result) => {
+        if (result.type === "relation") {
+          const fromId = regionIdMap.get(result.from_id);
+          const toId = regionIdMap.get(result.to_id);
+
+          return fromId && toId ? [{ ...result, from_id: fromId, to_id: toId }] : [];
+        }
+
+        const id = regionIdMap.get(result.id);
+        return id ? [{ ...result, id }] : [];
+      });
+
+      self.deserializeResults(remappedResults);
       self.updateObjects();
-      return self.regionStore.regions.slice(prevSize);
+
+      return Array.from(regionIdMap.values())
+        .map((id) => self.areas.get(`${id}#${self.id}`))
+        .filter(Boolean);
     },
 
     serializeAnnotation(options) {

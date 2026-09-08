@@ -185,6 +185,32 @@ const RelationStore = types
       return rl;
     },
 
+    addRelations(sources, target) {
+      const createdRelations = [];
+      let skipped = 0;
+
+      for (const source of sources) {
+        if (!source || !target || source === target || source.id === target.id) {
+          skipped++;
+          continue;
+        }
+
+        const relation = self.addRelation(source, target);
+
+        if (relation) {
+          createdRelations.push(relation);
+        } else {
+          skipped++;
+        }
+      }
+
+      return {
+        created: createdRelations.length,
+        skipped,
+        createdRelations,
+      };
+    },
+
     deleteRelation(rl) {
       self.relations = self.relations.filter((r) => r.id !== rl.id);
       destroy(rl);
