@@ -119,8 +119,22 @@ def user_login(request):
     if user.is_authenticated:
         return redirect(next_page)
 
+    # SAML SSO: `?local=1` is the break-glass switch that always exposes the password form
+    local_login_requested = bool(request.GET.get('local'))
+    password_login_disabled = settings.SAML_ENABLED and settings.SAML_DISABLE_PASSWORD_LOGIN
+    show_password_form = not password_login_disabled or local_login_requested or request.method == 'POST'
+    if (
+        request.method == 'GET'
+        and settings.SAML_ENABLED
+        and settings.SAML_LOGIN_AUTO_REDIRECT
+        and not local_login_requested
+    ):
+        return redirect(f'{reverse("saml2_login")}?next={quote(next_page)}')
+
     if request.method == 'POST':
         form = login_form(request.POST)
+        if form.is_valid() and password_login_disabled and not form.cleaned_data['user'].is_superuser:
+            form.add_error(None, 'Password login is disabled for this instance. Use single sign-on instead.')
         if form.is_valid():
             user = form.cleaned_data['user']
             login(request, user, backend='django.contrib.auth.backends.ModelBackend')
@@ -135,10 +149,11 @@ def user_login(request):
             user.save(update_fields=['active_organization'])
             return redirect(next_page)
 
+    context = {'form': form, 'next': quote(next_page), 'show_password_form': show_password_form}
     if flag_set('fflag_feat_front_lsdv_e_297_increase_oss_to_enterprise_adoption_short'):
-        return render(request, 'users/new-ui/user_login.html', {'form': form, 'next': quote(next_page)})
+        return render(request, 'users/new-ui/user_login.html', context)
 
-    return render(request, 'users/user_login.html', {'form': form, 'next': quote(next_page)})
+    return render(request, 'users/user_login.html', context)
 
 
 @login_required

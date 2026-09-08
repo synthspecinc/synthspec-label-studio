@@ -15,6 +15,13 @@
 {% block user_content %}
   <div class="form-wrapper">
     <h2>Log in</h2>
+    {% if settings.SAML_ENABLED %}
+    <a id="sso-login" class="login-button sso-button" href="{% url 'saml2_login' %}?next={{ next }}">{{ settings.SAML_LOGIN_BUTTON_LABEL }}</a>
+    {% if show_password_form %}
+    <p class="sso-divider">or</p>
+    {% endif %}
+    {% endif %}
+    {% if show_password_form %}
     <form id="login-form" action="{% url 'user-login' %}?next={{ next }}" method="post">
       {% csrf_token %}
       <div class="input-wrapper">
@@ -38,6 +45,7 @@
       </div>
       <button type="submit" aria-label="Log In" class="login-button">Log in</button>
     </form>
+    {% endif %}
   </div>
   {% if not settings.DISABLE_SIGNUP_WITHOUT_LINK %}
   <div class="text-wrapper">

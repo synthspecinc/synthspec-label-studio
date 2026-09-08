@@ -1,0 +1,11 @@
+{% extends 'users/new-ui/user_base.html' %}
+
+{% block user_content %}
+  <div class="form-wrapper">
+    <h2>Single sign-on failed</h2>
+    <p>{{ message }}</p>
+    <form action="{% url 'user-login' %}" method="get">
+      <button type="submit" class="login-button">Back to log in</button>
+    </form>
+  </div>
+{% endblock %}

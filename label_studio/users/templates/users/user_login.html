@@ -1,6 +1,10 @@
 {% extends 'users/user_base.html' %}
 
 {% block user_content %}
+  {% if settings.SAML_ENABLED %}
+    <p><a id="sso-login" class="lsf-button-ls lsf-button-ls_look_primary" href="{% url 'saml2_login' %}?next={{ next }}">{{ settings.SAML_LOGIN_BUTTON_LABEL }}</a></p>
+  {% endif %}
+  {% if show_password_form %}
   <form id="login-form" action="{% url 'user-login' %}?next={{ next }}" method="post">
     {% csrf_token %}
     <p><input type="text" class="lsf-input-ls" name="email" id="email" placeholder="Email" value="{{ form.data.email }}"></p>
@@ -18,5 +22,6 @@
     </p>
     <p><button type="submit" aria-label="Log In" class="lsf-button-ls lsf-button-ls_look_primary">Log in</button></p>
   </form>
+  {% endif %}
 
 {% endblock %}
