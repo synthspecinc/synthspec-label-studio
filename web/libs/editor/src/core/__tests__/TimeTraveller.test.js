@@ -114,6 +114,20 @@ describe("TimeTraveller", () => {
       expect(root.timeTraveller.history.length).toBeGreaterThan(lenBefore);
     });
 
+    it("cancelFreeze discards a reverted transaction without adding history", () => {
+      const { root, store } = createRoot();
+      const initialLength = root.timeTraveller.history.length;
+      root.timeTraveller.freeze("drawing");
+      applySnapshot(store, { value: 1 });
+      applySnapshot(store, { value: 0 });
+
+      root.timeTraveller.cancelFreeze("drawing");
+
+      expect(root.timeTraveller.isFrozen).toBe(false);
+      expect(root.timeTraveller.history).toHaveLength(initialLength);
+      expect(root.timeTraveller.canUndo).toBe(false);
+    });
+
     it("safeUnfreeze only updates isFrozen", () => {
       const { root } = createRoot();
       root.timeTraveller.freeze("k");

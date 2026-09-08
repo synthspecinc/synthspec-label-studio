@@ -36,6 +36,9 @@ const _BaseNPointTool = types
           controlTagTypes: ["rectanglelabels", "rectangle"],
         };
       },
+      get supportsDrawingCancellation() {
+        return true;
+      },
       get defaultDimensions() {
         return DEFAULT_DIMENSIONS.rect;
       },

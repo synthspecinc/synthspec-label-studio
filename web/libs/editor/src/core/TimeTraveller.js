@@ -62,6 +62,14 @@ const TimeTraveller = types
         }
       },
 
+      cancelFreeze(key) {
+        self.safeUnfreeze(key);
+        if (!self.isFrozen) {
+          changesDuringFreeze = false;
+          self.setReplaceNextUndoState(false);
+        }
+      },
+
       setSkipNextUndoState(value = true) {
         self.skipNextUndoState = value;
       },
