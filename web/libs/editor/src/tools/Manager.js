@@ -148,8 +148,13 @@ class ToolsManager {
       unrelatedLabels.forEach((tag) => tag.unselectAll());
     }
 
-    currentTool?.handleToolSwitch?.(tool);
-    currentTool?.complete?.();
+    if (currentTool !== tool && currentTool?.supportsDrawingCancellation) {
+      currentTool.cancelDrawing();
+      currentTool.discardDrawingTransaction();
+    } else {
+      currentTool?.handleToolSwitch?.(tool);
+      currentTool?.complete?.();
+    }
 
     if (selected) {
       this.unselectAll();
@@ -192,6 +197,23 @@ class ToolsManager {
     return Object.values(this.tools).find((t) => t.isDrawing);
   }
 
+  findSelectionTool() {
+    return Object.values(this.tools).find((t) => t.toolName === "MoveTool" || t.fullName === "MoveTool");
+  }
+
+  cancelDrawingAndSelectDefault() {
+    const selectedTool = this.findSelectedTool();
+    const drawingTool = selectedTool?.supportsDrawingCancellation ? selectedTool : this.findDrawingTool();
+
+    if (!drawingTool?.supportsDrawingCancellation) return false;
+
+    drawingTool.cancelDrawing();
+    drawingTool.discardDrawingTransaction();
+    this.unselectAll();
+    (this.findSelectionTool() ?? this._default_tool)?.setSelected?.(true);
+    return true;
+  }
+
   /**
    * Release the active drawing tool's in-progress state without modifying the
    * region itself (the region may already be submitted). Delegates to the
@@ -202,7 +224,13 @@ class ToolsManager {
     const drawingTool = this.findDrawingTool();
 
     if (drawingTool?.currentArea) {
-      drawingTool.resetBeforeAnnotationSwitch();
+      if (drawingTool.supportsDrawingCancellation) {
+        drawingTool.cancelDrawing();
+        // Annotation switching is itself an MST action. Let its reverted
+        // snapshot flush while history is still frozen, then discard the
+        // transaction without producing an orphan undo state.
+        drawingTool.discardDrawingTransactionAfterSnapshot();
+      } else drawingTool.resetBeforeAnnotationSwitch();
     }
   }
 

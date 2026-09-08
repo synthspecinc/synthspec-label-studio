@@ -5,10 +5,13 @@
 if (typeof globalThis.structuredClone === "undefined") {
   globalThis.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
 }
+globalThis.__appStoreKeyHandlers = [];
 
 mockModule("keymaster", () => {
   let scope = "all";
-  const keymaster = () => {};
+  const keymaster = (key, keyScope, handler) => {
+    globalThis.__appStoreKeyHandlers.push({ key, scope: keyScope, handler });
+  };
   keymaster.unbind = () => {};
   keymaster.setScope = (nextScope) => {
     scope = nextScope ?? scope;
@@ -99,9 +102,24 @@ mockModule("../../components/Infomodal/Infomodal", () => ({
 import "../../tags/visual/View";
 import "../../tags/object/RichText";
 import "../../tags/object/Image/Image.js";
+import "../../tags/control/RectangleLabels";
+import "../../tags/control/PolygonLabels";
 import AppStore from "../AppStore";
 
 const MINIMAL_CONFIG = '<View><Image name="img" value="$img" /></View>';
+const ESCAPE_DRAWING_CONFIG = `
+  <View>
+    <RectangleLabels name="rect" toName="img"><Label value="Fixture" /></RectangleLabels>
+    <PolygonLabels name="poly" toName="img"><Label value="Area" /></PolygonLabels>
+    <Image name="img" value="$img" />
+  </View>
+`;
+
+function getRegisteredHotkey(name) {
+  const { Hotkey: HotkeyFn } = require("../../core/Hotkey");
+  const shortcut = HotkeyFn.keymap[name].key.toLowerCase();
+  return globalThis.__appStoreKeyHandlers.findLast(({ key }) => key === shortcut)?.handler;
+}
 
 function createTestEnv(overrides = {}) {
   return {
@@ -136,6 +154,7 @@ function createStore(snapshot = {}, envOverrides) {
 describe("AppStore", () => {
   beforeEach(() => {
     clearAllMocks();
+    globalThis.__appStoreKeyHandlers = [];
     mockHasEvent.mockReturnValue(false);
     localStorage.setItem("autoAnnotation", "false");
     localStorage.setItem("autoAcceptSuggestions", "false");
@@ -187,6 +206,184 @@ describe("AppStore", () => {
       );
       expect(store.users.length).toBe(1);
       expect(store.users[0].id).toBe(42);
+    });
+  });
+
+  describe("region:exit drawing cancellation", () => {
+    function createDrawingStore() {
+      const store = createStore({ config: ESCAPE_DRAWING_CONFIG });
+      store.initializeStore({ annotations: [{ result: [] }] });
+      const annotation = store.annotationStore.selected;
+      const image = annotation.names.get("img");
+      const manager = image.getToolsManager();
+      const escape = getRegisteredHotkey("region:exit");
+      return { store, annotation, image, manager, escape };
+    }
+
+    function pressEscape(handler) {
+      handler({
+        stopImmediatePropagation: mock(),
+        stopPropagation: mock(),
+        preventDefault: mock(),
+      });
+    }
+
+    function addCompletedRectangle(annotation) {
+      annotation.deserializeResults([
+        {
+          id: "completed-rect",
+          from_name: "rect",
+          to_name: "img",
+          type: "rectanglelabels",
+          value: { x: 10, y: 10, width: 20, height: 20, rotation: 0, rectanglelabels: ["Fixture"] },
+        },
+      ]);
+      annotation.reinitHistory();
+      return annotation.regions.find((region) => region.cleanId === "completed-rect");
+    }
+
+    it("deactivates an idle rectangle tool and selects Move", () => {
+      const { manager, escape } = createDrawingStore();
+      const rectangle = manager.allTools().find((tool) => tool.control?.name === "rect");
+      const move = manager.findSelectionTool();
+      manager.selectTool(rectangle, true);
+
+      pressEscape(escape);
+
+      expect(rectangle.selected).toBe(false);
+      expect(move.selected).toBe(true);
+    });
+
+    it("cancels a rectangle preview without a result or history entry", () => {
+      const { annotation, image, manager, escape } = createDrawingStore();
+      const rectangle = manager.allTools().find((tool) => tool.control?.name === "rect");
+      manager.selectTool(rectangle, true);
+      const historyLength = annotation.history.history.length;
+      rectangle.startDrawing(10, 10);
+      expect(image.drawingRegion).not.toBeNull();
+
+      pressEscape(escape);
+
+      expect(image.drawingRegion).toBeNull();
+      expect(annotation.results).toHaveLength(0);
+      expect(annotation.history.history).toHaveLength(historyLength);
+      expect(manager.findSelectionTool().selected).toBe(true);
+    });
+
+    it("cancels an unfinished polygon and repeated Escape is idempotent", () => {
+      const { annotation, manager, escape } = createDrawingStore();
+      const polygon = manager.allTools().find((tool) => tool.control?.name === "poly");
+      manager.selectTool(polygon, true);
+      const historyLength = annotation.history.history.length;
+      polygon.startDrawing(10, 10);
+      polygon.nextPoint(20, 20);
+      expect(annotation.hasIncompleteRegions).toBe(true);
+      expect(annotation.history.isFrozen).toBe(true);
+      expect(annotation.history.history).toHaveLength(historyLength);
+
+      pressEscape(escape);
+      expect(annotation.history.history).toHaveLength(historyLength);
+      pressEscape(escape);
+
+      expect(annotation.regions).toHaveLength(0);
+      expect(annotation.results).toHaveLength(0);
+      expect(annotation.history.history).toHaveLength(historyLength);
+      expect(manager.findSelectionTool().selected).toBe(true);
+    });
+
+    it("retains completed-region unselection when Move is active", () => {
+      const { annotation, manager, escape } = createDrawingStore();
+      const region = addCompletedRectangle(annotation);
+      manager.selectTool(manager.findSelectionTool(), true);
+      annotation.selectAreas([region]);
+      expect(annotation.selectedRegions).toHaveLength(1);
+
+      pressEscape(escape);
+
+      expect(annotation.selectedRegions).toHaveLength(0);
+      expect(annotation.regions).toHaveLength(1);
+    });
+
+    it("exits relation mode before touching an active drawing tool", () => {
+      const { annotation, manager, escape } = createDrawingStore();
+      const region = addCompletedRectangle(annotation);
+      const rectangle = manager.allTools().find((tool) => tool.control?.name === "rect");
+      manager.selectTool(rectangle, true);
+      annotation.startLinkingMode("create_relation", region);
+
+      pressEscape(escape);
+
+      expect(annotation.isLinkingMode).toBe(false);
+      expect(rectangle.selected).toBe(true);
+      expect(annotation.regions).toHaveLength(1);
+    });
+
+    it("switching tools cancels an unfinished polygon instead of completing it", () => {
+      const { annotation, manager } = createDrawingStore();
+      const rectangle = manager.allTools().find((tool) => tool.control?.name === "rect");
+      const polygon = manager.allTools().find((tool) => tool.control?.name === "poly");
+      manager.selectTool(polygon, true);
+      const historyLength = annotation.history.history.length;
+      polygon.startDrawing(10, 10);
+      polygon.nextPoint(300, 10);
+      polygon.nextPoint(300, 300);
+
+      manager.selectTool(rectangle, true);
+
+      expect(annotation.regions).toHaveLength(0);
+      expect(annotation.results).toHaveLength(0);
+      expect(annotation.history.history).toHaveLength(historyLength);
+      expect(rectangle.selected).toBe(true);
+    });
+
+    it("cancels an unfinished polygon when switching annotations without leaking history", async () => {
+      const store = createStore({ config: ESCAPE_DRAWING_CONFIG });
+      store.initializeStore({
+        annotations: [
+          { id: 1, result: [] },
+          { id: 2, result: [] },
+        ],
+      });
+      const first = store.annotationStore.selected;
+      const image = first.names.get("img");
+      const manager = image.getToolsManager();
+      const polygon = manager.allTools().find((tool) => tool.control?.name === "poly");
+      manager.selectTool(polygon, true);
+      const historyLength = first.history.history.length;
+      polygon.startDrawing(10, 10);
+      polygon.nextPoint(300, 10);
+      polygon.nextPoint(300, 300);
+
+      store.annotationStore.selectAnnotation(2);
+      await Promise.resolve();
+
+      expect(first.regions).toHaveLength(0);
+      expect(first.results).toHaveLength(0);
+      expect(first.history.isFrozen).toBe(false);
+      expect(first.history.history).toHaveLength(historyLength);
+      expect(store.annotationStore.selected.pk).toBe("2");
+    });
+
+    it("keeps completed polygon drawing as one undoable history operation", async () => {
+      const { annotation, manager } = createDrawingStore();
+      const polygon = manager.allTools().find((tool) => tool.control?.name === "poly");
+      manager.selectTool(polygon, true);
+      const historyLength = annotation.history.history.length;
+      polygon.startDrawing(10, 10);
+      polygon.nextPoint(300, 10);
+      polygon.nextPoint(300, 300);
+
+      polygon.finishDrawing();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(annotation.regions).toHaveLength(1);
+      expect(annotation.hasIncompleteRegions).toBe(false);
+      expect(annotation.history.isFrozen).toBe(false);
+      expect(annotation.history.history).toHaveLength(historyLength + 1);
+      annotation.undo();
+      expect(annotation.regions).toHaveLength(0);
+      annotation.redo();
+      expect(annotation.regions).toHaveLength(1);
     });
   });
 

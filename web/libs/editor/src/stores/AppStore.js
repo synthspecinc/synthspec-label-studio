@@ -532,7 +532,13 @@ export default types
 
         const c = self.annotationStore.selected;
         if (c?.cancelGroupTranslation()) return;
+        if (c?.isLinkingMode) {
+          c.stopLinkingMode();
+          return;
+        }
         const managers = ToolsManager.allInstances();
+        const cancelledDrawingTool = managers.map((manager) => manager.cancelDrawingAndSelectDefault()).some(Boolean);
+        if (cancelledDrawingTool) return;
         const tools = managers
           .map((m) => m.findSelectedTool())
           .filter(Boolean)
@@ -568,8 +574,6 @@ export default types
           }
         } else if (selectedCompleteDrawingRegions.length > 0) {
           clearSelectedCompleteDrawingRegions();
-        } else if (c && c.isLinkingMode) {
-          c.stopLinkingMode();
         } else if (!c.isDrawing) {
           c.unselectAll();
         }

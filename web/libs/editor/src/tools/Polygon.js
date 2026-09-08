@@ -36,6 +36,9 @@ const _Tool = types
           controlTagTypes: ["polygonlabels", "polygon"],
         };
       },
+      get supportsDrawingCancellation() {
+        return true;
+      },
 
       get viewTooltip() {
         return "Polygon region";
@@ -111,6 +114,7 @@ const _Tool = types
       startDrawing(x, y) {
         const point = self.control?.getSnappedPoint({ x, y });
 
+        self._beginDrawingTransaction();
         self.mode = "drawing";
         self.currentArea = self.createRegion(self.createRegionOptions({ x: point.x, y: point.y }), true);
         self.setDrawing(true);
@@ -122,7 +126,7 @@ const _Tool = types
         self.currentArea.notifyDrawingFinished();
         self.setDrawing(false);
         self.currentArea = null;
-        self.mode = "viewing";
+        self._resetState();
         self.annotation.afterCreateResult(currentArea, control);
       },
 

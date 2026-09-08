@@ -1,4 +1,4 @@
-import { types } from "mobx-state-tree";
+import { isAlive, types } from "mobx-state-tree";
 
 import Utils from "../utils";
 import { throttle } from "@humansignal/core/lib/utils/lodash-replacements";
@@ -113,7 +113,45 @@ const DrawingTool = types
     };
   })
   .actions((self) => {
+    const historyKey = {};
+    let drawingTransactionOpen = false;
+    let autosaveWasPaused = false;
+
+    const beginDrawingTransaction = () => {
+      if (drawingTransactionOpen) return;
+
+      drawingTransactionOpen = true;
+      self.annotation.history.freeze(historyKey);
+
+      const { autosave } = self.annotation;
+      if (autosave) {
+        autosaveWasPaused = autosave.paused;
+        autosave.cancel();
+        autosave.paused = true;
+      }
+    };
+
+    const closeDrawingTransaction = (commit, annotation = self.annotation) => {
+      if (!drawingTransactionOpen) return;
+
+      const { autosave } = annotation;
+      if (autosave) {
+        if (!commit) autosave.cancel();
+        autosave.paused = autosaveWasPaused;
+      }
+
+      if (commit) annotation.history.unfreeze(historyKey);
+      else annotation.history.cancelFreeze(historyKey);
+
+      drawingTransactionOpen = false;
+      autosaveWasPaused = false;
+    };
+
     return {
+      _beginDrawingTransaction() {
+        beginDrawingTransaction();
+      },
+
       createDrawingRegion(opts) {
         const control = self.control;
         const resultValue = control.getResultValue();
@@ -126,6 +164,7 @@ const DrawingTool = types
         return self.currentArea;
       },
       resumeUnfinishedRegion(existingUnclosedPolygon) {
+        beginDrawingTransaction();
         self.currentArea = existingUnclosedPolygon;
         self.currentArea.setDrawing(true);
         self.annotation.regionStore.selection._updateResultsFromRegions([self.currentArea]);
@@ -205,7 +244,7 @@ const DrawingTool = types
       },
 
       startDrawing(x, y) {
-        self.annotation.history.freeze();
+        beginDrawingTransaction();
         self.mode = "drawing";
         self.currentArea = self.createDrawingRegion(self.createRegionOptions({ x, y }));
       },
@@ -213,7 +252,7 @@ const DrawingTool = types
         if (!self.beforeCommitDrawing()) {
           self.deleteRegion();
           if (self.control.type === self.tagTypes.stateTypes) self.annotation.unselectAll(true);
-          self._resetState();
+          self._resetState(false);
         } else {
           self._finishDrawing();
         }
@@ -222,10 +261,31 @@ const DrawingTool = types
         self.commitDrawingRegion();
         self._resetState();
       },
-      _resetState() {
+      _resetState(commit = true) {
         self.annotation.setIsDrawing(false);
-        self.annotation.history.unfreeze();
         self.mode = "viewing";
+        closeDrawingTransaction(commit);
+      },
+      resetDrawingInteraction() {},
+      cancelDrawing() {
+        const hadCurrentArea = Boolean(self.currentArea);
+
+        self.stopListening?.();
+        self.annotation.regionStore.selection.drawingUnselect?.();
+        if (hadCurrentArea) self.deleteRegion();
+        self.resetDrawingInteraction();
+        self.annotation.setIsDrawing(false);
+        self.mode = "viewing";
+      },
+      discardDrawingTransaction() {
+        closeDrawingTransaction(false);
+      },
+      discardDrawingTransactionAfterSnapshot() {
+        const annotation = self.annotation;
+
+        queueMicrotask(() => {
+          if (isAlive(annotation)) closeDrawingTransaction(false, annotation);
+        });
       },
       /**
        * Release the tool's in-progress drawing state without touching the
@@ -236,6 +296,7 @@ const DrawingTool = types
         self.stopListening?.();
         self.currentArea = null;
         self.mode = "viewing";
+        closeDrawingTransaction(false);
       },
     };
   });
@@ -262,6 +323,14 @@ const TwoPointsDrawingTool = DrawingTool.named("TwoPointsDrawingTool")
     };
 
     return {
+      resetDrawingInteraction() {
+        self.updateDraw.cancel?.();
+        startPoint = null;
+        endPoint = { x: 0, y: 0 };
+        currentMode = DEFAULT_MODE;
+        modeAfterMouseMove = DEFAULT_MODE;
+      },
+
       updateDraw: throttle((x, y) => {
         if (currentMode === DEFAULT_MODE) return;
         self.draw(x, y);
@@ -396,6 +465,14 @@ const MultipleClicksDrawingTool = DrawingTool.named("MultipleClicksMixin")
     };
 
     return {
+      resetDrawingInteraction() {
+        startPoint = { x: 0, y: 0 };
+        pointsCount = 0;
+        lastPoint = { x: -1, y: -1 };
+        lastEvent = 0;
+        lastClickTs = 0;
+      },
+
       canStartDrawing() {
         return Super.canStartDrawing() && !self.annotation.regionStore.hasSelection;
       },
@@ -428,7 +505,7 @@ const MultipleClicksDrawingTool = DrawingTool.named("MultipleClicksMixin")
       cleanupUncloseableShape() {
         self.deleteRegion();
         if (self.control.type === self.tagTypes.stateTypes) self.annotation.unselectAll(true);
-        self._resetState();
+        self._resetState(false);
       },
       mousedownEv(ev, [x, y]) {
         if (!self.isAllowedInteraction(ev)) return;
@@ -518,6 +595,13 @@ const ThreePointsDrawingTool = DrawingTool.named("ThreePointsDrawingTool")
     };
 
     return {
+      resetDrawingInteraction() {
+        points = [];
+        lastEvent = 0;
+        currentMode = DEFAULT_MODE;
+        startPoint = null;
+      },
+
       canStartDrawing() {
         return !self.isIncorrectControl();
       },
