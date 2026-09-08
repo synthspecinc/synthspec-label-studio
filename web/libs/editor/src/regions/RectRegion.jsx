@@ -14,6 +14,7 @@ import NormalizationMixin from "../mixins/Normalization";
 import RegionsMixin from "../mixins/Regions";
 import { ImageModel } from "../tags/object/Image";
 import { rotateBboxCoords } from "../utils/bboxCoords";
+import { showEditorNotification } from "../utils/editorNotifications";
 import { createDragBoundFunc } from "../utils/image";
 import { AliveRegion } from "./AliveRegion";
 import { EditableRegion } from "./EditableRegion";
@@ -462,11 +463,43 @@ const HtxRectangleView = ({ item, setShapeRef }) => {
         e.currentTarget.stopDrag(e.evt);
         return;
       }
+
+      const groupTranslation = item.annotation.startGroupTranslation?.(item) ?? { mode: "single" };
+
+      if (groupTranslation.mode === "blocked") {
+        e.currentTarget.stopDrag(e.evt);
+        showEditorNotification({ message: groupTranslation.message, type: "info" });
+        return;
+      }
+
+      if (groupTranslation.mode === "group") return;
       item.annotation.history.freeze(item.id);
+    };
+
+    eventHandlers.onDragMove = (e) => {
+      const annotation = item.annotation;
+
+      if (!annotation?.isGroupTranslating) return;
+      annotation.previewGroupTranslation(item, {
+        x: e.target.getAttr("x"),
+        y: e.target.getAttr("y"),
+      });
     };
 
     eventHandlers.onDragEnd = (e) => {
       const t = e.target;
+      const annotation = item.annotation;
+
+      if (!annotation) return;
+
+      if (annotation.isGroupTranslating) {
+        annotation.previewGroupTranslation(item, {
+          x: t.getAttr("x"),
+          y: t.getAttr("y"),
+        });
+        annotation.commitGroupTranslation(item);
+        return;
+      }
 
       item.setPosition(t.getAttr("x"), t.getAttr("y"), t.getAttr("width"), t.getAttr("height"), t.getAttr("rotation"));
       item.setScale(t.getAttr("scaleX"), t.getAttr("scaleY"));
@@ -483,7 +516,7 @@ const HtxRectangleView = ({ item, setShapeRef }) => {
         });
       }
 
-      item.annotation.history.unfreeze(item.id);
+      annotation.history.unfreeze(item.id);
 
       item.notifyDrawingFinished();
     };

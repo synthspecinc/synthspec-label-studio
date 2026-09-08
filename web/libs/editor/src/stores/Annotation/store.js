@@ -134,6 +134,8 @@ const AnnotationStoreModel = types
         // annotation's region. This is the annotation-switch counterpart of the
         // per-tool handleToolSwitch cleanup.
         ToolsManager.resetActiveDrawings();
+        self.selected.cancelGroupTranslation();
+        self.selected.stopLinkingMode();
         self.selected.setIsDrawing(false);
 
         self.selected.unselectAll();

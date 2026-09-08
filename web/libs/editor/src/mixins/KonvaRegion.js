@@ -154,17 +154,16 @@ export const KonvaRegionMixin = types
         };
 
         if (!annotation.isReadOnly() && annotation.isLinkingMode) {
-          annotation.addLinkedRegion(self);
-          const relation = annotation.relationStore?.relations?.at(-1);
-          if (relation) {
+          const result = annotation.addLinkedRegion(self);
+          result?.createdRelations?.forEach((relation) => {
             emitRelationCreated(annotation.store, annotation, {
               relation_id: relation.id,
               source_region_id: relation.node1?.id,
               target_region_id: relation.node2?.id,
             });
-          }
+          });
           annotation.stopLinkingMode();
-          annotation.regionStore.unselectAll();
+          if (!result?.isBulk) annotation.regionStore.unselectAll();
         } else {
           self._selectArea(additiveMode);
         }
