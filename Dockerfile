@@ -93,8 +93,9 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 
 ## Starting from this line all packages will be installed in $VENV_PATH
 
-# Copy dependency files
+# Copy dependency files (vendor/ holds locally patched wheels referenced by pyproject.toml)
 COPY pyproject.toml poetry.lock README.md ./
+COPY vendor ./vendor
 
 # Set a default build argument for including dev dependencies
 ARG INCLUDE_DEV=false
@@ -146,7 +147,8 @@ RUN apk add --no-cache \
     curl \
     nginx \
     bash \
-    procps
+    procps \
+    xmlsec
 
 RUN set -eux; \
     mkdir -p $LS_DIR $LABEL_STUDIO_BASE_DATA_DIR $OPT_DIR && \

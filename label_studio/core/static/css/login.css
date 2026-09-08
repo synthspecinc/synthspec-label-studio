@@ -376,3 +376,31 @@ label {
 .text-wrapper a:hover {
   text-decoration: none;
 }
+
+/* SAML single sign-on entry point on the login page (mirrors the form button) */
+.login_page_new_ui .sso-button {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 4rem;
+  color: var(--color-neutral-inverted-content);
+  padding: 10px 0;
+  border: none;
+  background: var(--color-neutral-inverted-surface);
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  font-family: 'Hellix', sans-serif;
+}
+
+.login_page_new_ui .sso-button:hover {
+  color: var(--color-neutral-inverted-content);
+  background: var(--color-neutral-inverted-surface-hover);
+}
+
+.login_page_new_ui .sso-divider {
+  margin: .75rem 0;
+  text-align: center;
+  font-size: .875rem;
+  color: var(--color-neutral-content-subtler);
+}

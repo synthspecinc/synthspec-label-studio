@@ -244,12 +244,15 @@ INSTALLED_APPS = [
     'ml_model_providers',
     'jwt_auth',
     'session_policy',
+    'djangosaml2',
+    'saml',
 ]
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'djangosaml2.middleware.SamlSessionMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     'core.middleware.DisableCSRF',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -311,6 +314,7 @@ AUTH_USER_MODEL = 'users.User'
 AUTHENTICATION_BACKENDS = [
     'rules.permissions.ObjectPermissionBackend',
     'django.contrib.auth.backends.ModelBackend',
+    'saml.backends.LabelStudioSaml2Backend',
 ]
 USE_USERNAME_FOR_LOGIN = False
 
@@ -939,3 +943,35 @@ FSM_INITIALIZATION_TRANSITION_NAME = 'fsm.utils._get_initialization_transition_n
 # Used for async migrations. In LSE this is set to a real queue name, including here so we
 # can use settings.SERVICE_QUEUE_NAME in async migrations in LSO
 SERVICE_QUEUE_NAME = get_env('SERVICE_QUEUE_NAME', 'default')
+
+# SAML single sign-on (see label_studio/saml/README.md for the Google Workspace walkthrough)
+SAML_ENABLED = get_bool_env('SAML_ENABLED', False)
+# Absolute public URL of this instance; the SP entity id and ACS URL are derived from it
+SAML_SP_BASE_URL = get_env('SAML_SP_BASE_URL', HOSTNAME)
+SAML_SP_ENTITY_ID = get_env('SAML_SP_ENTITY_ID', None)
+# Identity provider: a metadata file/URL/XML, or the explicit entity id + SSO URL + certificate
+SAML_IDP_METADATA_FILE = get_env('SAML_IDP_METADATA_FILE', None)
+SAML_IDP_METADATA_URL = get_env('SAML_IDP_METADATA_URL', None)
+SAML_IDP_METADATA_XML = get_env('SAML_IDP_METADATA_XML', None)
+SAML_IDP_ENTITY_ID = get_env('SAML_IDP_ENTITY_ID', None)
+SAML_IDP_SSO_URL = get_env('SAML_IDP_SSO_URL', None)
+SAML_IDP_X509_CERT = get_env('SAML_IDP_X509_CERT', None)
+# Provisioning and login-page behaviour
+SAML_ALLOWED_DOMAINS = [domain.strip().lower() for domain in get_env_list('SAML_ALLOWED_DOMAINS') if domain.strip()]
+SAML_CREATE_UNKNOWN_USER = get_bool_env('SAML_CREATE_UNKNOWN_USER', True)
+SAML_DISABLE_PASSWORD_LOGIN = get_bool_env('SAML_DISABLE_PASSWORD_LOGIN', False)
+SAML_LOGIN_AUTO_REDIRECT = get_bool_env('SAML_LOGIN_AUTO_REDIRECT', False)
+SAML_LOGIN_BUTTON_LABEL = get_env('SAML_LOGIN_BUTTON_LABEL', 'Log in with SSO')
+SAML_XMLSEC_BINARY = get_env('SAML_XMLSEC_BINARY', None)
+SAML_ATTRIBUTE_MAPPING = {
+    get_env('SAML_ATTR_FIRST_NAME', 'first_name'): ('first_name',),
+    get_env('SAML_ATTR_LAST_NAME', 'last_name'): ('last_name',),
+}
+# djangosaml2 wiring: users are identified by the e-mail carried in the NameID
+SAML_USE_NAME_ID_AS_USERNAME = True
+SAML_DJANGO_USER_MAIN_ATTRIBUTE = 'email'
+SAML_DJANGO_USER_MAIN_ATTRIBUTE_LOOKUP = '__iexact'
+SAML_CONFIG_LOADER = 'saml.config.config_loader'
+SAML_DEFAULT_BINDING = 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect'
+SAML_IGNORE_AUTHENTICATED_USERS_ON_LOGIN = True
+ACS_DEFAULT_REDIRECT_URL = '/projects/'

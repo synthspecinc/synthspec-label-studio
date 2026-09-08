@@ -2064,6 +2064,24 @@
         "decorators": ""
     },
     {
+        "url": "/saml2/login/",
+        "module": "saml.views.SamlLoginView",
+        "name": "saml2_login",
+        "decorators": ""
+    },
+    {
+        "url": "/saml2/acs/",
+        "module": "saml.views.SamlAssertionConsumerServiceView",
+        "name": "saml2_acs",
+        "decorators": ""
+    },
+    {
+        "url": "/saml2/metadata/",
+        "module": "saml.views.SamlMetadataView",
+        "name": "saml2_metadata",
+        "decorators": ""
+    },
+    {
         "url": "/docs/api/schema/",
         "module": "drf_spectacular.views.SpectacularAPIView",
         "name": "schema",

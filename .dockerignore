@@ -24,3 +24,6 @@ label_studio/**/*.pyc
 !LICENSE
 !pyproject.toml
 !poetry.lock
+
+# Locally patched wheels referenced by pyproject.toml
+!vendor/**
