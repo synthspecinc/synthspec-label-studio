@@ -16,6 +16,14 @@ jest.mock("../../core/Hotkey", () => {
   const mockHotkey = {
     unbindAll: jest.fn(),
     addNamed: jest.fn(),
+    removeNamed: jest.fn(),
+    overwriteNamed: jest.fn(),
+    addKey: jest.fn(),
+    removeKey: jest.fn(),
+    hasKey: jest.fn(() => false),
+    hasKeyByName: jest.fn(() => false),
+    // Label tags ask for a free key combination on init; none is available in tests.
+    makeComb: jest.fn(() => null),
   };
   const HotkeyFn = () => mockHotkey;
   HotkeyFn.setScope = jest.fn();
@@ -218,7 +226,7 @@ describe("AppStore", () => {
       const historyLength = annotation.history.history.length;
       polygon.startDrawing(10, 10);
       polygon.nextPoint(20, 20);
-      expect(annotation.hasIncompleteRegions).toBe(true);
+      expect(annotation.hasIncompletePolygons).toBe(true);
       expect(annotation.history.isFrozen).toBe(true);
       expect(annotation.history.history).toHaveLength(historyLength);
 
@@ -318,7 +326,7 @@ describe("AppStore", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(annotation.regions).toHaveLength(1);
-      expect(annotation.hasIncompleteRegions).toBe(false);
+      expect(annotation.hasIncompletePolygons).toBe(false);
       expect(annotation.history.isFrozen).toBe(false);
       expect(annotation.history.history).toHaveLength(historyLength + 1);
       annotation.undo();

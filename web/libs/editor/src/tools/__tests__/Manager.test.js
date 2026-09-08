@@ -143,8 +143,8 @@ describe("ToolsManager", () => {
 
     it("cancels supported drawing tools before an annotation switch", () => {
       const m = ToolsManager.getInstance({ name: "reset-supported" });
-      const cancelDrawing = mock();
-      const discardDrawingTransactionAfterSnapshot = mock();
+      const cancelDrawing = jest.fn();
+      const discardDrawingTransactionAfterSnapshot = jest.fn();
       const drawingTool = {
         selected: true,
         isDrawing: true,
@@ -364,21 +364,21 @@ describe("ToolsManager", () => {
     it("cancels an unfinished drawing instead of completing it when switching tools", () => {
       const m = ToolsManager.getInstance({ name: "sel" });
       const current = {
-        setSelected: mock(),
+        setSelected: jest.fn(),
         selected: true,
         isDrawingTool: true,
         isDrawing: true,
         supportsDrawingCancellation: true,
         currentArea: {},
-        cancelDrawing: mock(),
-        discardDrawingTransaction: mock(),
-        complete: mock(),
+        cancelDrawing: jest.fn(),
+        discardDrawingTransaction: jest.fn(),
+        complete: jest.fn(),
         group: "segmentation",
         control: { type: "rectanglelabels" },
         obj: { activeStates: () => [] },
       };
       const next = {
-        setSelected: mock(),
+        setSelected: jest.fn(),
         group: "segmentation",
         control: { type: "polygonlabels" },
         obj: { activeStates: () => [] },
@@ -401,17 +401,17 @@ describe("ToolsManager", () => {
         selected: true,
         isDrawingTool: true,
         supportsDrawingCancellation: true,
-        setSelected: mock(function setSelected(value) {
+        setSelected: jest.fn(function setSelected(value) {
           drawing.selected = value;
         }),
-        cancelDrawing: mock(),
-        discardDrawingTransaction: mock(),
+        cancelDrawing: jest.fn(),
+        discardDrawingTransaction: jest.fn(),
       };
       const def = {
         selected: false,
         default: true,
         toolName: "MoveTool",
-        setSelected: mock(function setSelected(value) {
+        setSelected: jest.fn(function setSelected(value) {
           def.selected = value;
         }),
       };
@@ -427,7 +427,7 @@ describe("ToolsManager", () => {
 
     it("is inert when the selected tool is not an image drawing tool", () => {
       const m = ToolsManager.getInstance({ name: "cancel" });
-      const selected = { selected: true, setSelected: mock() };
+      const selected = { selected: true, setSelected: jest.fn() };
       m.tools["k#selected"] = selected;
 
       expect(m.cancelDrawingAndSelectDefault()).toBe(false);
