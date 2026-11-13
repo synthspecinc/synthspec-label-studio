@@ -282,6 +282,9 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': ('rest_framework.renderers.JSONRenderer',),
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'PAGE_SIZE': 100,
+    # DRF 3.18 reports list item errors as an index-keyed dict by default. Keep the 1.23.x list format
+    # so API clients see unchanged validation errors (PROD-3042).
+    'LIST_SERIALIZER_ERRORS_AS_DICT': False,
 }
 SILENCED_SYSTEM_CHECKS += ['rest_framework.W001']
 
