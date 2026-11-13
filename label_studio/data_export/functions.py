@@ -32,3 +32,14 @@ def converter_http_session(hostname: Optional[str]) -> Optional[requests.Session
     if not settings.SSRF_PROTECTION_ENABLED:
         return None
     return ssrf_safe_session(trusted_origin=hostname)
+
+
+def converter_access_token(organization) -> Optional[str]:
+    """Legacy API token the export converter sends when it downloads media from this host.
+
+    Returns None when the organization's creator has no legacy token, so exports that need no media
+    download still work (PROD-3042). Upstream later replaced this lookup with a converter token.
+    """
+    from rest_framework.authtoken.models import Token
+
+    return Token.objects.filter(user_id=organization.created_by_id).values_list('key', flat=True).first()
