@@ -93,9 +93,8 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 
 ## Starting from this line all packages will be installed in $VENV_PATH
 
-# Copy dependency files (vendor/ holds locally patched wheels referenced by pyproject.toml)
+# Copy dependency files
 COPY pyproject.toml poetry.lock README.md ./
-COPY vendor ./vendor
 
 # Set a default build argument for including dev dependencies
 ARG INCLUDE_DEV=false
